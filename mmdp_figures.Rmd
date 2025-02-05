@@ -1,0 +1,43 @@
+---
+title: "Figures for LF MMDP"
+---
+ 
+#Preparing the dataset
+```{r}
+plot(cars)
+```
+
+#General study characteristics
+
+```{r}
+#Total IPD
+
+
+
+#Total IPD by year
+
+
+
+#Total IPD by country
+```
+
+#Total IPD by state for India
+
+```{r}
+#Prepare shape file for India
+
+```
+
+#Interventions
+
+```{r}
+
+#Pie chart for intervention type
+
+```
+
+#Follow-up time
+```{r}
+
+```
+
