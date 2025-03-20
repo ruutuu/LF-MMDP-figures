@@ -1,43 +1,228 @@
 ---
 title: "Figures for LF MMDP"
 ---
- 
-#Preparing the dataset
 ```{r}
-plot(cars)
+# installing the required library 
+install.packages('gsheet')
+install.packages('dplyr')
+install.packages("ggplot2")
+install.packages("sf")        # For handling shapefiles
+install.packages("rnaturalearth")  # For downloading India shapefile
+install.packages("rnaturalearthdata")
+install.packages("dplyr")
+
+install.packages("ggthemes")  # Optional, for better themes
+install.packages("ggrepel")   # For text label positioning
+install.packages("showtext")  # For better font rendering
 ```
 
-#General study characteristics
+```{r}
+
+library(gsheet)
+ 
+# reading the sheet data
+data <-gsheet2tbl(
+  "https://docs.google.com/spreadsheets/d/1_c3gVEHf0vACkbB7PrZYNa6_laSuFVqk/edit?gid=937101449#gid=937101449")
+
+```
+
+General study characteristics
 
 ```{r}
 #Total IPD
 
-
+tot_ipd<-sum(data$samplesize)
+print(tot_ipd)
 
 #Total IPD by year
 
+# Load dplyr package
+
+library(dplyr)
+
+# Sum IPD (samplesize) by year
+
+# Define year groups in bins of 5 years (including 2021 in 2016-2021)
+data <- data %>%
+  mutate(year_group = case_when(
+    year %in% c(2000, 2001, 2002, 2003, 2004) ~ "2000-2004",
+    year %in% c(2005, 2006, 2007, 2008, 2009) ~ "2005-2009",
+    year %in% c(2010, 2011, 2012, 2013, 2015) ~ "2010-2015",
+    year %in% c(2016, 2017, 2018, 2019, 2020, 2021) ~ "2016-2021"
+  ))
+
+# Sum IPD (samplesize) for each group
+IPD_by_year <- data %>%
+  group_by(year_group) %>%
+  summarise(total_IPD = sum(samplesize, na.rm = TRUE)) %>%
+  arrange(year_group) # Ensures proper order
+
+# Print result
+print(IPD_by_year)
 
 
 #Total IPD by country
+
+# Sum IPD (samplesize) by country
+IPD_by_country <- data %>%
+  group_by(country) %>%
+  summarise(total_IPD = sum(samplesize, na.rm = TRUE)) %>%
+  arrange(desc(total_IPD))  # Sort by highest IPD
+
+# Print result
+print(IPD_by_country)
 ```
 
-#Total IPD by state for India
+Total IPD by state for India
 
 ```{r}
 #Prepare shape file for India
+# Filter for India and sum IPD by state
+IPD_by_state_India <- data %>%
+  filter(country == "India") %>%  # Select only India
+  group_by(state) %>%
+  summarise(total_IPD = sum(samplesize, na.rm = TRUE)) %>%
+  arrange(desc(total_IPD))  # Sort by highest IPD
+  
 
+IPD_by_state_India$total_IPD[2]<-3040
+IPD_by_state_India$state[3]<-"Karnataka"
+IPD_by_state_India$total_IPD[3]<-157
+  print(IPD_by_state_India)
+```
+
+```{r}
+
+library(ggplot2)
+library(sf)
+library(dplyr)
+library(ggthemes)  # Optional for better map themes
+library(ggrepel)   # Ensures text labels do not overlap
+library(showtext)
+
+
+# Get the shapefile of India (level 1 for states)
+
+
+india_shapefile <- st_read("~/LF MMDP figures/shapefiles/gadm41_IND_1.shp")  # Change path
+
+
+# Rename "state" to match the shapefile's state column (may vary)
+colnames(india_shapefile)[4] <- "state"  
+library(dplyr)
+# Merge shapefile with IPD data
+india_map <- india_shapefile %>%
+  left_join(IPD_by_state_India, by = "state")
+  
+  
+  # Extract centroid coordinates for text labels
+india_map <- india_map %>%
+  mutate(centroid = st_centroid(geometry)) %>%  # Get centroid of each state
+  mutate(lon = st_coordinates(centroid)[,1],  # Extract longitude
+         lat = st_coordinates(centroid)[,2])  # Extract latitude
+         
+         
+# Enable better fonts
+showtext_auto()
+
+
+
+# Create heatmap
+ggplot(data = india_map) +
+  geom_sf(aes(fill = total_IPD), color = "black", size = 0.3) +  # State borders
+  scale_fill_gradientn(colors = c("lightblue", "cyan", "blue", "darkblue"),
+                       na.value = "gray90", name = "Total IPD") +  # Updated color scale
+  geom_text_repel(data = india_map, aes(x = lon, y = lat, label = total_IPD),  # Correct coordinates
+                  size = 4, color = "black", fontface = "bold", na.rm = TRUE) +  # Labels for total IPD
+  theme_minimal() +  # Clean theme
+  labs(title = "Individual Participant Data (IPD) by State in India",
+           caption = "Data Source: MMDP Studies on Lymphatic Filariasis") +
+  theme(axis.text = element_blank(), 
+        axis.ticks = element_blank(),
+        axis.title = element_blank(),  # Remove x and y axis labels
+        panel.grid = element_blank(),
+        legend.position = "right",
+        text = element_text(size = 14, family = "Arial"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),  # Center align title
+        plot.subtitle = element_text(hjust = 0.5))  # Center align subtitle
 ```
 
 #Interventions
 
 ```{r}
+# Define intervention types and study counts
+# Define intervention types and study counts
+intervention_data <- data.frame(
+  Intervention = c("MMDP care practices", 
+                   "MMDP + Drug therapy", 
+                   "MMDP + Complex decongestive therapy", 
+                   "Drug therapy",  
+                   "Surgical (Hydrocele)", 
+                   "Surgical (Penoscrotal reconstructive)", 
+                   "Surgical (Lymph node transfer + debulking)",
+                   "Other non-surgical (Laser/Acupressure/Pneumatic)"),  # Move this to end
+  Count = c(19, 5, 2, 7, 4, 1, 1, 2)
+)
 
-#Pie chart for intervention type
+# Compute percentages
+intervention_data <- intervention_data %>%
+  mutate(Percentage = Count / sum(Count) * 100)
+
+# Define colors: Subtle blues for MMDP-related, soft teal for drug therapy, muted greys for surgical
+colors <- c("darkcyan", "cyan3", "turquoise",  # Blue gradient for MMDP-related
+            "tan1",  # Soft teal for drug therapy
+            "#a3a3a3", "#787878", "#545454",  # Muted greys for surgical interventions
+            "ivory")  # Dark blue for Other non-surgical
+
+
+# Create the pie chart
+ggplot(intervention_data, aes(x = "", y = Count, fill = Intervention)) +
+  geom_bar(stat = "identity", width = 1, color = "black") +  # Bar chart for pie
+  coord_polar("y", start = 0, clip = "off") +  # Convert to pie chart, prevent label cutoff
+  scale_fill_manual(values = colors) +  # Apply custom colors
+  theme_minimal() +  # Clean theme
+  theme(axis.text = element_blank(),  # Remove axis labels
+        axis.ticks = element_blank(),
+        panel.grid = element_blank(),
+        legend.position = "right",
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 14)) +
+  labs(title = "Distribution of Interventions in Studies",
+       fill = "Intervention Type")
+
 
 ```
 
 #Follow-up time
 ```{r}
+# Define the factor levels in the required order
+data$fu_cat <- factor(data$fu_cat, levels = c(
+  "<6 months", "6 months", "9 months", "1 year", "2 years", ">2 years", "No Follow-Up Information"
+))
+
+# Summarize follow-up category counts in the specified order
+follow_up_summary <- data %>%
+  group_by(fu_cat) %>%
+  summarise(Count = n()) %>%
+  arrange(match(fu_cat, levels(data$fu_cat)))
+
+
+
+# Create a publication-quality bar chart
+ggplot(follow_up_summary, aes(x = fu_cat, y = Count, fill = fu_cat)) +
+   geom_bar(stat = "identity", color = "black", width = 0.75) +  # Slightly closer bars
+  scale_fill_manual(values = c("#5e81ac", "#5e81ac", "#5e81ac", "#5e81ac", "#5e81ac", "#5e81ac", "gray30")) +  # Subtle professional colors
+  theme_minimal() +
+  labs(title = "Follow-Up Duration Across Studies",
+       x = "Follow-Up Category",
+       y = "Number of Studies") +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        plot.title = element_text(hjust = 0.5, size = 16),
+        legend.position = "none") +
+  geom_text(aes(label = Count), vjust = 1.5, size = 4, color = "white")  # Display number of studies inside bars
+
 
 ```
+
 
